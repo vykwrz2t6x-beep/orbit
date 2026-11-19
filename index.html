@@ -43,6 +43,7 @@
   .btn{
     display:inline-block;padding:13px 22px;border-radius:10px;font-weight:600;
     font-size:15px;text-decoration:none;transition:.18s transform,.18s opacity;
+    border:0;cursor:pointer;font-family:inherit;
   }
   .btn:hover{transform:translateY(-1px)}
   .primary{background:linear-gradient(135deg,var(--acc),#34d399);color:#052e21}
@@ -53,8 +54,32 @@
   .card h3{font-size:16px;margin-bottom:8px;letter-spacing:-.01em}
   .card p{color:var(--mut);font-size:14.5px}
   .num{color:var(--acc);font-size:13px;font-weight:700;letter-spacing:.08em;margin-bottom:14px}
+
+  .form-sec{padding:0 0 96px}
+  .form-box{
+    background:linear-gradient(180deg,rgba(110,231,183,.06),rgba(96,165,250,.04));
+    border:1px solid var(--line);border-radius:18px;padding:32px;
+    display:grid;grid-template-columns:1fr 1fr;gap:18px;
+  }
+  .form-box h2{grid-column:1/-1;font-size:26px;letter-spacing:-.02em}
+  .form-box .hint{grid-column:1/-1;color:var(--mut);font-size:14.5px}
+  .field{display:flex;flex-direction:column;gap:7px}
+  .field.full{grid-column:1/-1}
+  label{font-size:13px;color:var(--mut)}
+  input,textarea{
+    background:#0c0e14;border:1px solid var(--line);border-radius:10px;
+    padding:13px 14px;color:var(--txt);font:inherit;font-size:15px;outline:none;
+    transition:.15s border-color,.15s box-shadow;
+  }
+  input:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(110,231,183,.12)}
+  textarea{resize:vertical;min-height:104px}
+  .form-box .btn{grid-column:1/-1;justify-self:start}
+  .status{grid-column:1/-1;font-size:14.5px;min-height:22px;color:var(--mut)}
+  .status.ok{color:var(--acc)}
+  .status.err{color:#ff6b8a}
   footer{border-top:1px solid var(--line);padding:26px 0;color:var(--mut);font-size:13.5px;
     display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  @media(max-width:640px){ .form-box{grid-template-columns:1fr;padding:22px} }
 </style>
 </head>
 <body>
@@ -63,8 +88,7 @@
     <div class="logo"><span class="dot"></span>Orbit</div>
     <nav>
       <a href="#how">Как это работает</a>
-      <a href="#pricing">Тарифы</a>
-      <a href="#contact">Связаться</a>
+      <a href="#lead">Оставить заявку</a>
     </nav>
   </header>
 
@@ -73,8 +97,8 @@
     <p class="sub">Статический сайт без сборки, хостинг бесплатный, деплой — пушем в репозиторий.
        Собирается за вечер, живёт годами.</p>
     <div class="cta">
-      <a class="btn primary" href="#how">Посмотреть, как</a>
-      <a class="btn ghost" href="#contact">Написать</a>
+      <a class="btn primary" href="#lead">Оставить заявку</a>
+      <a class="btn ghost" href="#how">Посмотреть, как</a>
     </div>
   </section>
 
@@ -91,15 +115,85 @@
     </article>
     <article class="card">
       <div class="num">03</div>
-      <h3>Бесплатно и честно</h3>
-      <p>Ни карты, ни триала. Свой домен подключается, HTTPS выдаётся автоматически.</p>
+      <h3>Заявки не теряются</h3>
+      <p>Форма уходит в Cloudflare Worker, тот пишет в базу D1 и присылает письмо. Без сервера и без карты.</p>
     </article>
   </section>
 
-  <footer id="contact">
+  <section class="form-sec" id="lead">
+    <form class="form-box" id="leadForm" novalidate>
+      <h2>Оставить заявку</h2>
+      <p class="hint">Ответим в течение дня. Данные попадают в базу и приходят на почту.</p>
+
+      <div class="field">
+        <label for="f-name">Как вас зовут</label>
+        <input id="f-name" name="name" type="text" placeholder="Имя" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="f-contact">Email или Telegram</label>
+        <input id="f-contact" name="contact" type="text" placeholder="you@mail.ru или @nick" required autocomplete="email">
+      </div>
+      <div class="field full">
+        <label for="f-msg">Что нужно сделать</label>
+        <textarea id="f-msg" name="message" placeholder="Пара предложений о задаче"></textarea>
+      </div>
+
+      <button class="btn primary" type="submit" id="f-submit">Отправить</button>
+      <p class="status" id="f-status" role="status"></p>
+    </form>
+  </section>
+
+  <footer>
     <span>© 2026 Orbit</span>
-    <span>Сделано на GitHub Pages</span>
+    <span>GitHub Pages + Cloudflare Workers + D1</span>
   </footer>
 </div>
+
+<script>
+  const API = "https://leads-api.almishi.workers.dev/api/lead";
+  const form = document.getElementById("leadForm");
+  const status = document.getElementById("f-status");
+  const btn = document.getElementById("f-submit");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = {
+      name: form.name.value,
+      contact: form.contact.value,
+      message: form.message.value,
+      page: location.pathname,
+    };
+    if (!data.contact || data.contact.trim().length < 3) {
+      status.className = "status err";
+      status.textContent = "Укажите email или Telegram — иначе не сможем ответить.";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Отправляем…";
+    status.className = "status";
+    status.textContent = "";
+    try {
+      const r = await fetch(API, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const j = await r.json();
+      if (r.ok && j.ok) {
+        status.className = "status ok";
+        status.textContent = "Готово. Заявка №" + j.id + " принята — ответим на " + data.contact;
+        form.reset();
+      } else {
+        throw new Error(j.error || "сервер отказал");
+      }
+    } catch (err) {
+      status.className = "status err";
+      status.textContent = "Не отправилось: " + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Отправить";
+    }
+  });
+</script>
 </body>
 </html>
